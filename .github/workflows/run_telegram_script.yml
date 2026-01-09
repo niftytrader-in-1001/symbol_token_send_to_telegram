@@ -3,7 +3,7 @@ name: Run Telegram Upload Script
 on:
   schedule:
     - cron: '30 3 * * 2' # Every Tuesday at 09:00 IST
-    - cron: '30 3 * * 5' # Every Friday at 09:00 IST
+    - cron: '30 23 * * 6' # Every Friday at 09:00 IST
 
 jobs:
   run-script:
