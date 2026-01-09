@@ -1,9 +1,10 @@
 name: Run Telegram Upload Script
 
 on:
+  workflow_dispatch:  # allows manual trigger
   schedule:
-    - cron: '30 3 * * 2' # Every Tuesday at 09:00 IST
-    - cron: '30 23 * * 6' # Every Friday at 09:00 IST
+    - cron: '30 3 * * 2'  # Tuesday 09:00 IST
+    - cron: '30 3 * * 5'  # Friday 09:00 IST
 
 jobs:
   run-script:
