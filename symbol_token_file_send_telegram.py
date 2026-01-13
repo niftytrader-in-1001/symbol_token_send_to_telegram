@@ -101,19 +101,9 @@ import requests
 import io
 import os
 
-# ==================================================
-# CONFIG
-# ==================================================
-NFO_URL = "https://api.shoonya.com/NFO_symbols.txt.zip"
-BFO_URL = "https://api.shoonya.com/BFO_symbols.txt.zip"
 
 TZ = "Asia/Kolkata"
 today = pd.Timestamp.now(tz=TZ).normalize()
-
-# -------- TELEGRAM CONFIG --------
-SEND_ZIP_TO_TELEGRAM = True
-TELEGRAM_BOT_TOKEN = os.getenv("BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("CHAT_ID")
 
 # -------- INDEX CONFIG --------
 INDEX_CONFIG = [
@@ -225,9 +215,3 @@ if SEND_ZIP_TO_TELEGRAM:
         print("⚠️ Telegram credentials missing")
 else:
     print("⏭ Telegram sending disabled")
-
-        print("⚠️ Telegram credentials missing")
-else:
-    print("⏭ Telegram sending disabled")
-
-
