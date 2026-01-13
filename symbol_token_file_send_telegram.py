@@ -95,4 +95,139 @@ if __name__ == "__main__":
         print("❌ Error occurred:", e)
 
 
+import pandas as pd
+import zipfile
+import requests
+import io
+import os
+
+# ==================================================
+# CONFIG
+# ==================================================
+NFO_URL = "https://api.shoonya.com/NFO_symbols.txt.zip"
+BFO_URL = "https://api.shoonya.com/BFO_symbols.txt.zip"
+
+TZ = "Asia/Kolkata"
+today = pd.Timestamp.now(tz=TZ).normalize()
+
+# -------- TELEGRAM CONFIG --------
+SEND_ZIP_TO_TELEGRAM = True
+TELEGRAM_BOT_TOKEN = os.getenv("BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("CHAT_ID")
+
+# -------- INDEX CONFIG --------
+INDEX_CONFIG = [
+    {"name": "NIFTY", "symbol": "NIFTY", "instrument": "OPTIDX", "type": "WEEKLY", "exchange": "NFO", "weekly_window": 6},
+    {"name": "BANKNIFTY", "symbol": "BANKNIFTY", "instrument": "OPTIDX", "type": "MONTHLY", "exchange": "NFO"},
+    {"name": "FINNIFTY", "symbol": "FINNIFTY", "instrument": "OPTIDX", "type": "MONTHLY", "exchange": "NFO"},
+    {"name": "MIDCPNIFTY", "symbol": "MIDCPNIFTY", "instrument": "OPTIDX", "type": "MONTHLY", "exchange": "NFO"},
+    {"name": "SENSEX", "symbol": "BSXOPT", "instrument": "OPTIDX", "type": "WEEKLY", "exchange": "BFO", "weekly_window": 6},
+]
+
+# ==================================================
+# LOAD SYMBOL MASTER
+# ==================================================
+def load_symbol_master(url):
+    r = requests.get(url)
+    r.raise_for_status()
+    with zipfile.ZipFile(io.BytesIO(r.content)) as z:
+        with z.open(z.namelist()[0]) as f:
+            return pd.read_csv(f)
+
+print("📥 Loading symbol masters...")
+df_nfo = load_symbol_master(NFO_URL)
+df_bfo = load_symbol_master(BFO_URL)
+print("✅ Symbol masters loaded")
+
+# ==================================================
+# CREATE ZIP IN MEMORY (NO TXT FILES)
+# ==================================================
+zip_buffer = io.BytesIO()
+zip_name = f"NFO_BFO_{today.strftime('%d-%b-%Y').upper()}.zip"
+
+with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+
+    for cfg in INDEX_CONFIG:
+        print(f"\n================ {cfg['name']} ================")
+
+        df_src = df_nfo if cfg["exchange"] == "NFO" else df_bfo
+
+        df_idx = df_src[
+            (df_src["Symbol"] == cfg["symbol"]) &
+            (df_src["Instrument"] == cfg["instrument"])
+        ].copy()
+
+        if df_idx.empty:
+            print("⚠️ No contracts found")
+            continue
+
+        df_idx["Expiry_dt"] = (
+            pd.to_datetime(df_idx["Expiry"], format="%d-%b-%Y", errors="coerce")
+            .dt.tz_localize(TZ)
+        )
+        df_idx = df_idx.dropna(subset=["Expiry_dt"])
+
+        if cfg["type"] == "WEEKLY":
+            df_idx["days_ahead"] = (df_idx["Expiry_dt"] - today).dt.days
+            valid = df_idx[
+                (df_idx["days_ahead"] >= 0) &
+                (df_idx["days_ahead"] <= cfg["weekly_window"])
+            ]
+            if valid.empty:
+                print("⚠️ No active weekly expiry")
+                continue
+            expiry_dt = valid["Expiry_dt"].min()
+        else:
+            future = df_idx[df_idx["Expiry_dt"] >= today]
+            if future.empty:
+                print("⚠️ No future monthly expiry")
+                continue
+            expiry_dt = future["Expiry_dt"].min()
+
+        expiry_str = expiry_dt.strftime("%d-%b-%Y").upper()
+        filename = f"{cfg['name'].lower()}_{expiry_str}.txt"
+
+        data = df_idx[df_idx["Expiry_dt"] == expiry_dt] \
+            .drop(columns=["Expiry_dt", "days_ahead"], errors="ignore")
+        
+        # 🔥 REMOVE TRAILING EMPTY COLUMNS
+        data = data.loc[:, ~data.columns.str.startswith("Unnamed")]
+        
+        zf.writestr(filename, data.to_csv(index=False))
+
+        print(f"✅ Added to ZIP: {filename}")
+
+print("\n📦 ZIP created in memory")
+
+# ==================================================
+# SEND ZIP TO TELEGRAM
+# ==================================================
+def send_zip_to_telegram(zip_bytes, zip_name, token, chat_id):
+    url = f"https://api.telegram.org/bot{token}/sendDocument"
+    files = {"document": (zip_name, zip_bytes)}
+    data = {"chat_id": chat_id}
+    r = requests.post(url, files=files, data=data, timeout=30)
+    if r.status_code == 200:
+        print("📤 ZIP sent to Telegram")
+    else:
+        print(f"❌ Telegram error: {r.text}")
+
+if SEND_ZIP_TO_TELEGRAM:
+    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+        zip_buffer.seek(0)
+        send_zip_to_telegram(
+            zip_buffer.read(),
+            zip_name,
+            TELEGRAM_BOT_TOKEN,
+            TELEGRAM_CHAT_ID
+        )
+    else:
+        print("⚠️ Telegram credentials missing")
+else:
+    print("⏭ Telegram sending disabled")
+
+        print("⚠️ Telegram credentials missing")
+else:
+    print("⏭ Telegram sending disabled")
+
 
