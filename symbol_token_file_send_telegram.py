@@ -4,6 +4,7 @@ from datetime import datetime
 import os
 import zipfile
 from io import BytesIO
+import io
 
 # ---------------- CONFIG ----------------
 NFO_URL = "https://api.shoonya.com/NFO_symbols.txt.zip"
@@ -92,5 +93,6 @@ if __name__ == "__main__":
         main()
     except Exception as e:
         print("❌ Error occurred:", e)
+
 
 
