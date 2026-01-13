@@ -18,31 +18,23 @@ SAVE_FILE_LOCALLY = False
 # ----------------------------------------
 
 def download_and_extract_zip(url):
-    """
-    Download a ZIP file and return its content as a DataFrame.
-    Auto-detects whether the text file is comma or tab-separated.
-    """
     response = requests.get(url, timeout=60)
     response.raise_for_status()
 
     with zipfile.ZipFile(BytesIO(response.content)) as z:
         file_name = z.namelist()[0]
         with z.open(file_name) as f:
-            # Read a small sample to detect separator
-            sample_bytes = f.read(2048)  # first 2 KB
-            sample_text = sample_bytes.decode("utf-8", errors="ignore")
+            content = f.read().decode("utf-8")
+            # Remove trailing commas at the end of lines
+            content = "\n".join([line.rstrip(",") for line in content.splitlines()])
 
-            if sample_text.count("\t") > sample_text.count(","):
-                sep = "\t"
-            else:
-                sep = ","
+            # Detect separator
+            sample = "\n".join(content.splitlines()[:5])
+            sep = "\t" if sample.count("\t") > sample.count(",") else ","
 
-            # Reset pointer to start
-            f.seek(0)
-            df = pd.read_csv(f, sep=sep)
+            df = pd.read_csv(io.StringIO(content), sep=sep)
 
     return df
-
 
 def sort_df(df):
     # Only attempt to sort if these columns exist
@@ -100,4 +92,5 @@ if __name__ == "__main__":
         main()
     except Exception as e:
         print("❌ Error occurred:", e)
+
 
