@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 import os
 import zipfile
-from io import BytesIO, StringIO
+from io import BytesIO
 
 # ---------------- CONFIG ----------------
 NFO_URL = "https://api.shoonya.com/NFO_symbols.txt.zip"
@@ -17,33 +17,20 @@ TELEGRAM_CHAT_ID = os.getenv("CHAT_ID")
 SAVE_FILE_LOCALLY = False
 # ----------------------------------------
 
-def detect_separator(sample: str):
-    """
-    Detect whether CSV/TXT uses comma or tab as separator.
-    """
-    if sample.count("\t") > sample.count(","):
-        return "\t"
-    return ","
-
 def download_and_extract_zip(url):
     """
-    Download a ZIP file, detect separator, and return its content as a DataFrame.
+    Download a ZIP file and return its content as a DataFrame.
     Assumes the ZIP contains a single text file.
     """
     response = requests.get(url, timeout=60)
     response.raise_for_status()
 
     with zipfile.ZipFile(BytesIO(response.content)) as z:
+        # Assume ZIP contains only one file
         file_name = z.namelist()[0]
         with z.open(file_name) as f:
-            # Read a small sample to detect separator
-            sample_bytes = f.read(1024)  # first 1KB
-            sample_text = sample_bytes.decode("utf-8", errors="ignore")
-            sep = detect_separator(sample_text)
-
-            # Reset pointer to start
-            f.seek(0)
-            df = pd.read_csv(f, sep=sep)
+            # Load CSV/TXT into DataFrame
+            df = pd.read_csv(f, sep="\t")  # assuming tab-separated; adjust if comma-separated
     return df
 
 def sort_df(df):
