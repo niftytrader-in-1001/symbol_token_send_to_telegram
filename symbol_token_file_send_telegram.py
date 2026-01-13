@@ -105,7 +105,9 @@ import os
 TZ = "Asia/Kolkata"
 today = pd.Timestamp.now(tz=TZ).normalize()
 
-# -------- INDEX CONFIG --------
+SEND_ZIP_TO_TELEGRAM = True
+
+
 INDEX_CONFIG = [
     {"name": "NIFTY", "symbol": "NIFTY", "instrument": "OPTIDX", "type": "WEEKLY", "exchange": "NFO", "weekly_window": 6},
     {"name": "BANKNIFTY", "symbol": "BANKNIFTY", "instrument": "OPTIDX", "type": "MONTHLY", "exchange": "NFO"},
@@ -118,11 +120,13 @@ INDEX_CONFIG = [
 # LOAD SYMBOL MASTER
 # ==================================================
 def load_symbol_master(url):
-    r = requests.get(url)
+    r = requests.get(url, timeout=60)
     r.raise_for_status()
     with zipfile.ZipFile(io.BytesIO(r.content)) as z:
         with z.open(z.namelist()[0]) as f:
-            return pd.read_csv(f)
+            content = f.read().decode("utf-8")
+            content = "\n".join(line.rstrip(",") for line in content.splitlines())
+            return pd.read_csv(io.StringIO(content))
 
 print("📥 Loading symbol masters...")
 df_nfo = load_symbol_master(NFO_URL)
@@ -130,13 +134,12 @@ df_bfo = load_symbol_master(BFO_URL)
 print("✅ Symbol masters loaded")
 
 # ==================================================
-# CREATE ZIP IN MEMORY (NO TXT FILES)
+# CREATE ZIP IN MEMORY
 # ==================================================
 zip_buffer = io.BytesIO()
 zip_name = f"NFO_BFO_{today.strftime('%d-%b-%Y').upper()}.zip"
 
 with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-
     for cfg in INDEX_CONFIG:
         print(f"\n================ {cfg['name']} ================")
 
@@ -151,10 +154,10 @@ with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             print("⚠️ No contracts found")
             continue
 
-        df_idx["Expiry_dt"] = (
-            pd.to_datetime(df_idx["Expiry"], format="%d-%b-%Y", errors="coerce")
-            .dt.tz_localize(TZ)
-        )
+        df_idx["Expiry_dt"] = pd.to_datetime(
+            df_idx["Expiry"], format="%d-%b-%Y", errors="coerce"
+        ).dt.tz_localize(TZ)
+
         df_idx = df_idx.dropna(subset=["Expiry_dt"])
 
         if cfg["type"] == "WEEKLY":
@@ -179,12 +182,11 @@ with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
 
         data = df_idx[df_idx["Expiry_dt"] == expiry_dt] \
             .drop(columns=["Expiry_dt", "days_ahead"], errors="ignore")
-        
-        # 🔥 REMOVE TRAILING EMPTY COLUMNS
-        data = data.loc[:, ~data.columns.str.startswith("Unnamed")]
-        
-        zf.writestr(filename, data.to_csv(index=False))
 
+        # remove trailing empty columns
+        data = data.loc[:, ~data.columns.str.startswith("Unnamed")]
+
+        zf.writestr(filename, data.to_csv(index=False))
         print(f"✅ Added to ZIP: {filename}")
 
 print("\n📦 ZIP created in memory")
@@ -192,25 +194,18 @@ print("\n📦 ZIP created in memory")
 # ==================================================
 # SEND ZIP TO TELEGRAM
 # ==================================================
-def send_zip_to_telegram(zip_bytes, zip_name, token, chat_id):
-    url = f"https://api.telegram.org/bot{token}/sendDocument"
+def send_zip_to_telegram(zip_bytes, zip_name):
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
     files = {"document": (zip_name, zip_bytes)}
-    data = {"chat_id": chat_id}
+    data = {"chat_id": TELEGRAM_CHAT_ID}
     r = requests.post(url, files=files, data=data, timeout=30)
-    if r.status_code == 200:
-        print("📤 ZIP sent to Telegram")
-    else:
-        print(f"❌ Telegram error: {r.text}")
+    r.raise_for_status()
+    print("📤 ZIP sent to Telegram")
 
 if SEND_ZIP_TO_TELEGRAM:
     if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
         zip_buffer.seek(0)
-        send_zip_to_telegram(
-            zip_buffer.read(),
-            zip_name,
-            TELEGRAM_BOT_TOKEN,
-            TELEGRAM_CHAT_ID
-        )
+        send_zip_to_telegram(zip_buffer.read(), zip_name)
     else:
         print("⚠️ Telegram credentials missing")
 else:
