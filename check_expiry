@@ -1,0 +1,61 @@
+import requests
+import datetime
+import calendar
+
+SYMBOLS = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"]
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json",
+    "Referer": "https://www.nseindia.com/"
+}
+
+def last_thursday(year, month):
+    last_day = calendar.monthrange(year, month)[1]
+    d = datetime.date(year, month, last_day)
+    while d.weekday() != 3:  # Thursday
+        d -= datetime.timedelta(days=1)
+    return d
+
+session = requests.Session()
+session.headers.update(HEADERS)
+
+# Hit homepage once to set cookies
+session.get("https://www.nseindia.com", timeout=10)
+
+today = datetime.date.today()
+
+for symbol in SYMBOLS:
+    try:
+        url = f"https://www.nseindia.com/api/option-chain-contract-info?symbol={symbol}"
+        r = session.get(url, timeout=10)
+
+        if r.status_code != 200:
+            print(f"{symbol}: HTTP {r.status_code}")
+            continue
+
+        data = r.json()
+        expiry_strs = data.get("expiryDates", [])
+
+        if not expiry_strs:
+            print(f"{symbol}: No expiry dates")
+            continue
+
+        expiry_dates = sorted(
+            datetime.datetime.strptime(d, "%d-%b-%Y").date()
+            for d in expiry_strs
+        )
+
+        # Weekly expiry = nearest >= today
+        weekly = min(d for d in expiry_dates if d >= today)
+
+        # Monthly expiry = nearest to last Thursday of that month
+        target = last_thursday(weekly.year, weekly.month)
+        monthly = min(expiry_dates, key=lambda d: abs(d - target))
+
+        print(f"\n{symbol}")
+        print(f"Weekly Expiry  : {weekly}")
+        print(f"Monthly Expiry : {monthly}")
+
+    except Exception as e:
+        print(f"{symbol}: error -> {e}")
