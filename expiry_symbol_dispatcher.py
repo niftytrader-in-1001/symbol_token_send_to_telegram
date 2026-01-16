@@ -13,6 +13,9 @@ import pandas as pd
 from datetime import datetime
 from io import BytesIO
 
+# ===================== TEST MODE =====================
+FORCE_EXPIRY_TODAY = True   # 🔴 change to True for testing
+# ====================================================
 # ===================== CONFIG =====================
 NFO_URL = "https://api.shoonya.com/NFO_symbols.txt.zip"
 BFO_URL = "https://api.shoonya.com/BFO_symbols.txt.zip"
@@ -21,7 +24,12 @@ TELEGRAM_BOT_TOKEN = os.getenv("BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("CHAT_ID")
 
 TZ = "Asia/Kolkata"
-TODAY = pd.Timestamp.now(tz=TZ).normalize()
+REAL_TODAY = pd.Timestamp.now(tz=TZ).normalize()
+
+TODAY = REAL_TODAY  # default
+
+if FORCE_EXPIRY_TODAY:
+    print("⚠️ TEST MODE ENABLED: Forcing expiry = today")
 
 # Indices you care about
 INDEX_CONFIG = [
@@ -32,6 +40,7 @@ INDEX_CONFIG = [
     {"name": "SENSEX",     "symbol": "BSXOPT",     "instrument": "OPTIDX", "exchange": "BFO", "type": "WEEKLY"},
 ]
 # =================================================
+
 
 
 def download_symbol_master(url: str) -> pd.DataFrame:
@@ -108,14 +117,14 @@ def main():
         for cfg in INDEX_CONFIG:
             df_src = df_nfo if cfg["exchange"] == "NFO" else df_bfo
             expiry_dt, df_idx = get_expiry_for_index(df_src, cfg)
-
+        
             if expiry_dt is None:
                 continue
-
-            # 🚨 CORE CONDITION: only act on actual expiry day
-            if expiry_dt != TODAY:
+        
+            # 🚨 CORE CONDITION (works for PROD + TEST)
+            if not FORCE_EXPIRY_TODAY and expiry_dt != TODAY:
                 continue
-
+        
             fname, content = build_expiry_files(df_idx, cfg, expiry_dt)
             zf.writestr(fname, content)
             added_files += 1
