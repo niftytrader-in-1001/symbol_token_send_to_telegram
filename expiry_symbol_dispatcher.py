@@ -14,7 +14,7 @@ from datetime import datetime
 from io import BytesIO
 
 # ===================== TEST MODE =====================
-FORCE_EXPIRY_TODAY = True   # 🔴 change to True for testing
+FORCE_EXPIRY_TODAY = False   # 🔴 change to True for testing
 # ====================================================
 # ===================== CONFIG =====================
 NFO_URL = "https://api.shoonya.com/NFO_symbols.txt.zip"
